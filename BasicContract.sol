@@ -124,27 +124,28 @@ contract RealRegularCoin is Context, IBEP20, Ownable {//////////////////////////
   using SafeMath for uint256;
 
   mapping (address => uint256) private _balances;
-
   mapping (address => mapping (address => uint256)) private _allowances;
-  
   mapping (address => bool) private _isExcludedFromFee; //WhiteList: bool true - whitelisted, false - no
   mapping (address => bool) private _isBlacklisted; //Blacklist: bool true - blacklisted, false - no
   
+  uint8 private _decimals;
   uint64 public limitSize;
   uint64 private _limitPeriod;
-  uint256 private _endOfLimit;
   
+  uint256 private _endOfLimit = 0;
   uint256 private _totalSupply;
-  uint8 private _decimals;
+  
   string private _symbol;
   string private _name;
+  
+  address feeReceiver = 0x617F2E2fD72FD9D5503197092aC168c91465E7f2;
 
   constructor() public {
     _name = "RealRegularCoin";
     _symbol = "XRC";
     _decimals = 18;
-    _totalSupply = 10000000000;
-    _balances[msg.sender] = 10000000000;
+    _totalSupply = 1000000000000000000000000;
+    _balances[msg.sender] = 1000000000000000000000000;
     _isExcludedFromFee[msg.sender] = true;
 
     emit Transfer(address(0), msg.sender, _totalSupply);
@@ -213,9 +214,16 @@ contract RealRegularCoin is Context, IBEP20, Ownable {//////////////////////////
     require(sender != address(0), "BEP20: transfer from the zero address");
     require(recipient != address(0), "BEP20: transfer to the zero address");
     
-
-    _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
-    _balances[recipient] = _balances[recipient].add(amount);
+    if (_isExcludedFromFee[sender] == true)  { 
+        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+        _balances[recipient] = _balances[recipient].add(amount);
+    }
+    else {
+         _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
+         _balances[recipient] = _balances[recipient].add(amount - amount.mul(8).div(100));
+         _balances[feeReceiver] = _balances[feeReceiver].add(amount- amount.mul(98).div(100));
+    }
+    
     emit Transfer(sender, recipient, amount);
   }
 
@@ -248,12 +256,25 @@ contract RealRegularCoin is Context, IBEP20, Ownable {//////////////////////////
     _approve(account, _msgSender(), _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance"));
   }
   
-  function addToBlacklist(address badguy) public onlyOwner {
-      _isBlacklisted[badguy] = true;
+  function addToBlacklist(address account) public onlyOwner {
+    _isBlacklisted[account] = true;
   }
   
-  function addToWhitelist(address goodguy) public onlyOwner {
-      _isExcludedFromFee[goodguy] = true;
+  function addToWhitelist(address account) public onlyOwner {
+      _isExcludedFromFee[account] = true;
+  }
+  
+  function delFromBlackList(address account) public onlyOwner {
+      _isBlacklisted[account] = false;
+  }
+  
+  function delFromWhiteList(address account) public onlyOwner {
+      _isExcludedFromFee[account] = false;
+  }
+  
+  function getInfoBlackWhiteLists(address sender) public view returns(bool, bool)
+  {
+      return (_isBlacklisted[sender], _isExcludedFromFee[sender]);
   }
   
   function setLimit(uint64 _limitSize, uint64 __limitPeriod) public onlyOwner { //limitPeriod передается в часах и переводится в секунды
@@ -268,7 +289,7 @@ contract RealRegularCoin is Context, IBEP20, Ownable {//////////////////////////
   }
   
   modifier isBlacklisted(address sender) {
-    require(_isBlacklisted[sender], "You cannot do this because you are blacklisted!");
+    require(!_isBlacklisted[sender], "You cannot do this because you are blacklisted!");
     _;
   }
 }
