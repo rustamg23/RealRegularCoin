@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 pragma solidity 0.5.16;
 
 interface IBEP20 {
@@ -122,13 +120,20 @@ contract Ownable is Context {
   }
 }
 
-contract BEP20Token is Context, IBEP20, Ownable {
+contract RealRegularCoin is Context, IBEP20, Ownable {////////////////////////////////////
   using SafeMath for uint256;
 
   mapping (address => uint256) private _balances;
 
   mapping (address => mapping (address => uint256)) private _allowances;
-
+  
+  mapping (address => bool) private _isExcludedFromFee; //WhiteList: bool true - whitelisted, false - no
+  mapping (address => bool) private _isBlacklisted; //Blacklist: bool true - blacklisted, false - no
+  
+  uint64 public limitSize;
+  uint64 private _limitPeriod;
+  uint256 private _endOfLimit;
+  
   uint256 private _totalSupply;
   uint8 private _decimals;
   string private _symbol;
@@ -140,6 +145,7 @@ contract BEP20Token is Context, IBEP20, Ownable {
     _decimals = 18;
     _totalSupply = 10000000000;
     _balances[msg.sender] = 10000000000;
+    _isExcludedFromFee[msg.sender] = true;
 
     emit Transfer(address(0), msg.sender, _totalSupply);
   }
@@ -168,32 +174,32 @@ contract BEP20Token is Context, IBEP20, Ownable {
     return _balances[account];
   }
 
-  function transfer(address recipient, uint256 amount) external returns (bool) {
-   !!!!!!!! _transfer(_msgSender(), recipient, amount);
+  function transfer(address recipient, uint256 amount) external isBlacklisted(msg.sender) returns (bool) {
+    _transfer(_msgSender(), recipient, amount); //!!!!!!!
     return true;
   }
 
-  function allowance(address owner, address spender) external view returns (uint256) {
+  function allowance(address owner, address spender) external view isBlacklisted(msg.sender) returns (uint256) {
     return _allowances[owner][spender];
   }
 
-  function approve(address spender, uint256 amount) external returns (bool) {
+  function approve(address spender, uint256 amount) external isBlacklisted(msg.sender) returns (bool) {
     _approve(_msgSender(), spender, amount);
     return true;
   }
 
-  function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
+  function transferFrom(address sender, address recipient, uint256 amount) external isBlacklisted(msg.sender) returns (bool) {
     _transfer(sender, recipient, amount);
     _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
     return true;
   }
 
-  function increaseAllowance(address spender, uint256 addedValue) public returns (bool) {
+  function increaseAllowance(address spender, uint256 addedValue) public isBlacklisted(msg.sender) returns (bool) {
     _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
     return true;
   }
 
-  function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
+  function decreaseAllowance(address spender, uint256 subtractedValue) public isBlacklisted(msg.sender) returns (bool) {
     _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "BEP20: decreased allowance below zero"));
     return true;
   }
@@ -206,6 +212,7 @@ contract BEP20Token is Context, IBEP20, Ownable {
   function _transfer(address sender, address recipient, uint256 amount) internal {
     require(sender != address(0), "BEP20: transfer from the zero address");
     require(recipient != address(0), "BEP20: transfer to the zero address");
+    
 
     _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
     _balances[recipient] = _balances[recipient].add(amount);
@@ -239,5 +246,29 @@ contract BEP20Token is Context, IBEP20, Ownable {
   function _burnFrom(address account, uint256 amount) internal {
     _burn(account, amount);
     _approve(account, _msgSender(), _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance"));
+  }
+  
+  function addToBlacklist(address badguy) public onlyOwner {
+      _isBlacklisted[badguy] = true;
+  }
+  
+  function addToWhitelist(address goodguy) public onlyOwner {
+      _isExcludedFromFee[goodguy] = true;
+  }
+  
+  function setLimit(uint64 _limitSize, uint64 __limitPeriod) public onlyOwner { //limitPeriod передается в часах и переводится в секунды
+      limitSize = _limitSize; //размер лимита токенов в нативной валюте
+      _limitPeriod = __limitPeriod * 3600; //время действия ограничений
+      _endOfLimit = block.timestamp + _limitPeriod; 
+  }
+  
+  function whenTheLimitEnd() view public returns(uint256) { //публичная функция, которая возвращает количество секунд до конца лимита
+      require(_endOfLimit > block.timestamp, "There are no limits now!");
+      return _endOfLimit - block.timestamp;
+  }
+  
+  modifier isBlacklisted(address sender) {
+    require(_isBlacklisted[sender], "You cannot do this because you are blacklisted!");
+    _;
   }
 }
