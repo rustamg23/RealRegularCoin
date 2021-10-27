@@ -3,7 +3,7 @@ Regular BEP-20 standard coin
 Требования
 
 1) Дефляционная модель 8%:
-    4% в торговую пару BNB-XRC pancakeswap
+    4% в торговую пару BNB-XRC на https://pancakeswap.finance/swap
     2% burn()
     2% transfer()
 2) Blacklist - закрытие доступа к токенам
